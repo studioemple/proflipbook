@@ -188,6 +188,40 @@
   .hint{margin-top:16px;font-size:12px;color:var(--muted);opacity:.7;text-align:center}
   kbd{background:rgba(255,255,255,.1);border-radius:4px;padding:1px 6px;font-size:11px;font-family:inherit}
 
+  /* ---- Bottom corners: logo (left) + PDF download (right) ---- */
+  .corner-logo{
+    position:fixed;left:32px;bottom:26px;z-index:30;
+    display:block;line-height:0;
+    opacity:.92;transition:opacity .18s ease;
+  }
+  .corner-logo img{height:30px;width:auto;display:block;}
+  .corner-logo:hover{opacity:1;}
+
+  .pdf-btn{
+    position:fixed;right:32px;bottom:24px;z-index:30;
+    display:inline-flex;align-items:center;gap:9px;
+    background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.14);
+    color:var(--text);
+    padding:11px 18px;border-radius:999px;
+    font-size:13.5px;font-weight:500;
+    text-decoration:none;
+    backdrop-filter:blur(8px);
+    transition:background .18s ease, border-color .18s ease, transform .18s ease;
+  }
+  .pdf-btn:hover{background:rgba(61,123,214,.55);border-color:transparent;transform:translateY(-1px);}
+  .pdf-btn:active{transform:translateY(0) scale(.97);}
+  .pdf-btn svg{width:16px;height:16px;flex:0 0 auto}
+  .pdf-btn-short{display:none}
+
+  @media (max-width:720px){
+    .corner-logo{left:16px;bottom:16px}
+    .corner-logo img{height:22px}
+    .pdf-btn{right:16px;bottom:12px;padding:9px 13px;font-size:12px}
+    .pdf-btn-full{display:none}                    /* na mobitelu samo ikona + "PDF" */
+    .pdf-btn-short{display:inline}
+  }
+
   /* Loading */
   .loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg-1);z-index:100;transition:opacity .5s ease}
   .loader.hide{opacity:0;pointer-events:none}
@@ -233,6 +267,15 @@
   </div>
 
   <div class="hint">Povuci rub stranice · <kbd>←</kbd> <kbd>→</kbd> tipke · swipe na mobitelu</div>
+
+  <a class="corner-logo" href="https://rentl.io" target="_blank" rel="noopener" aria-label="Rentlio Pro">
+    <img src="assets/rentlio-pro-logo.svg" alt="Rentlio Pro">
+  </a>
+
+  <a class="pdf-btn" href="assets/rentlio-pro-brosura.pdf" download="Rentlio Pro brošura.pdf">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+    <span class="pdf-btn-full">Preuzmi PDF brošuru</span><span class="pdf-btn-short">PDF</span>
+  </a>
 
 <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 <script>
