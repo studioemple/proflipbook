@@ -1,0 +1,6 @@
+# izvorni print PDF-ovi (~600MB) — ostaju lokalno
+stranice/
+# nepovezani Next.js scaffold
+rentlio-pro-flipbook/
+.DS_Store
+.claude/

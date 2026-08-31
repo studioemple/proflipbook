@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Rentlio Pro — Interaktivna brošura</title>
+<style>
+  :root{
+    --bg-1:#0b1220;
+    --bg-2:#12203a;
+    --accent:#3d7bd6;
+    --text:#e7edf6;
+    --muted:#9fb2cc;
+    --book-shadow: 0 40px 80px rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    /* Layered "room": a cool blue key light from the upper-left, a soft halo
+       right behind the book, a faint teal bounce from below-right, and a wall
+       gradient that falls off into darkness (vignette in body::before). */
+    background:
+      radial-gradient(1000px 640px at 50% 36%, rgba(70,135,225,.20) 0%, transparent 62%),
+      radial-gradient(900px 620px at 14% 6%, rgba(96,164,255,.14) 0%, transparent 58%),
+      radial-gradient(760px 540px at 88% 94%, rgba(46,140,190,.10) 0%, transparent 60%),
+      linear-gradient(180deg, #0b1628 0%, #0d1e38 44%, #08101f 78%, #05080f 100%);
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:24px 16px;
+    overflow:hidden;
+    -webkit-user-select:none;user-select:none;
+  }
+  /* Vignette + a whisper of atmosphere: faint horizon where wall meets floor,
+     and a cold blue sheen across the top like distant ambient light. */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      linear-gradient(180deg, rgba(120,175,255,.045) 0%, transparent 18%),
+      linear-gradient(180deg, transparent 56%, rgba(140,190,255,.028) 63%, transparent 67%),
+      radial-gradient(125% 85% at 50% 44%, transparent 52%, rgba(0,0,0,.5) 100%);
+  }
+
+  /* ---- Stage ---- */
+  .stage{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width:1600px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+  }
+
+  /* flip-wrap width is set from JS (fitBook) so the book always fits the screen. */
+  .flip-wrap{position:relative;flex:1 1 auto;width:100%;max-width:1080px;min-width:0;}
+  /* Contact shadow directly beneath the book. While a page is mid-flip the
+     shadow spreads and softens (something is lifted off the surface), then
+     settles back when the page lands. */
+  .flip-wrap::after{
+    content:"";
+    position:absolute;
+    left:6%;right:6%;
+    bottom:-28px;height:52px;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,.6), transparent 72%);
+    filter:blur(9px);
+    z-index:0;
+    pointer-events:none;
+    transition:transform .45s ease, filter .45s ease, opacity .45s ease;
+  }
+  .flip-wrap.is-flipping::after{
+    transform:scaleX(1.07) scaleY(1.35);
+    filter:blur(15px);
+    opacity:.85;
+  }
+
+  #flipbook{
+    width:100%;
+    /* slide slightly so the lone cover / back page sits centred */
+    transition:transform .6s cubic-bezier(.22,.8,.3,1);
+    will-change:transform;
+    /* Cohesive, directional shadow (lit from top) — cast by the visible pages
+       only, so the transparent half beside cover/back stays shadowless. */
+    filter:
+      drop-shadow(0 2px 3px rgba(0,0,0,.35))
+      drop-shadow(0 22px 40px rgba(0,0,0,.5))
+      drop-shadow(0 50px 90px rgba(0,0,0,.45));
+  }
+  /* HTML render mode never rasterizes to a fixed canvas, so the flipping page
+     is free to sweep outside the book footprint — no overrides needed. */
+  #flipbook{overflow:visible;}
+
+  /* ---- StPageFlip's own stylesheet (verbatim from src/Style/stPageFlip.css) ----
+     The CDN browser bundle does NOT inject it, yet drawSoft() relies on it:
+     flipping/bottom pages get no inline `position`, so without
+     `.stf__item{position:absolute}` they fall into document flow and render
+     a whole page-height BELOW the book (the "mirrored page" artifact). */
+  .stf__parent{position:relative;display:block;box-sizing:border-box;transform:translateZ(0);-ms-touch-action:pan-y;touch-action:pan-y;}
+  .sft__wrapper{position:relative;width:100%;box-sizing:border-box;}
+  .stf__parent canvas{position:absolute;width:100%;height:100%;left:0;top:0;}
+  .stf__block{position:absolute;width:100%;height:100%;box-sizing:border-box;perspective:2000px;}
+  .stf__item{display:none;position:absolute;transform-style:preserve-3d;}
+  .stf__outerShadow{position:absolute;left:0;top:0;}
+  .stf__innerShadow{position:absolute;left:0;top:0;}
+  .stf__hardShadow{position:absolute;left:0;top:0;}
+  .stf__hardInnerShadow{position:absolute;left:0;top:0;}
+
+  /* .page shares the node with .stf__item — never set `position` here
+     (higher specificity would override the required absolute above). */
+  #flipbook .page{
+    background:#0e1a30;
+    overflow:hidden;
+    border-radius:2px;
+  }
+  #flipbook .page img{width:100%;height:100%;display:block;object-fit:cover;}
+
+  /* ---- Spine shading baked INTO each page's inner edge ----
+     It's part of the page itself, so it curls along during a flip,
+     never floats above the book, and needs no show/hide logic. */
+  #flipbook .page::after{
+    content:"";
+    position:absolute;top:0;bottom:0;width:8%;
+    pointer-events:none;
+  }
+  #flipbook .page--left::after{
+    right:0;
+    background:linear-gradient(to right, transparent, rgba(0,0,0,.18) 55%, rgba(0,0,0,.42) 100%);
+  }
+  #flipbook .page--right::after{
+    left:0;
+    background:linear-gradient(to left, transparent, rgba(0,0,0,.18) 55%, rgba(0,0,0,.42) 100%);
+  }
+
+  /* ---- Nav arrows ---- */
+  .nav{
+    border:0;cursor:pointer;
+    width:52px;height:52px;flex:0 0 auto;
+    border-radius:50%;
+    background:rgba(255,255,255,.06);
+    color:var(--text);
+    display:flex;align-items:center;justify-content:center;
+    transition:background .18s ease, transform .18s ease, opacity .18s ease;
+    backdrop-filter:blur(6px);
+    z-index:20;
+  }
+  .nav:hover{background:rgba(61,123,214,.55);transform:scale(1.06);}
+  .nav:active{transform:scale(.96);}
+  .nav:disabled{opacity:.25;cursor:default;transform:none;background:rgba(255,255,255,.06);}
+  .nav svg{width:22px;height:22px}
+
+  /* ---- Bottom bar ---- */
+  .toolbar{
+    margin-top:34px;
+    display:flex;align-items:center;gap:18px;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08);
+    padding:10px 16px;border-radius:999px;
+    backdrop-filter:blur(8px);
+    z-index:20;
+  }
+  .counter{font-variant-numeric:tabular-nums;font-size:14px;color:var(--muted);min-width:78px;text-align:center;letter-spacing:.03em}
+  .counter b{color:var(--text);font-weight:600}
+
+  /* "Back to start" — appears in the toolbar on the last page */
+  .restart{
+    display:none;
+    align-items:center;gap:7px;
+    border:0;cursor:pointer;
+    background:var(--accent);color:#fff;
+    padding:8px 16px;border-radius:999px;
+    font-size:13px;font-weight:600;font-family:inherit;
+    transition:background .18s ease, transform .18s ease;
+    animation:restart-in .35s ease;
+  }
+  .restart:hover{background:#5590e6;transform:scale(1.05);}
+  .restart:active{transform:scale(.96);}
+  .restart.show{display:inline-flex;}
+  .restart svg{width:15px;height:15px}
+  @keyframes restart-in{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+  .progress{position:relative;width:180px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
+  .progress > i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);border-radius:99px;transition:width .4s ease}
+
+  .hint{margin-top:16px;font-size:12px;color:var(--muted);opacity:.7;text-align:center}
+  kbd{background:rgba(255,255,255,.1);border-radius:4px;padding:1px 6px;font-size:11px;font-family:inherit}
+
+  /* Loading */
+  .loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg-1);z-index:100;transition:opacity .5s ease}
+  .loader.hide{opacity:0;pointer-events:none}
+  .spinner{width:42px;height:42px;border-radius:50%;border:3px solid rgba(255,255,255,.15);border-top-color:var(--accent);animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media (max-width:720px){
+    /* single-page mode: no spine, so no inner-edge shading */
+    #flipbook .page::after{display:none}
+    .nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;background:rgba(11,18,32,.5)}
+    .nav.prev{left:2px}.nav.next{right:2px}
+    .nav:hover{transform:translateY(-50%) scale(1.05)}
+    .toolbar{margin-top:24px}
+    .progress{width:120px}
+  }
+</style>
+</head>
+<body>
+
+  <div class="loader" id="loader"><div class="spinner"></div></div>
+
+  <div class="stage">
+    <button class="nav prev" id="prev" aria-label="Prethodna stranica">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+
+    <div class="flip-wrap">
+      <div id="flipbook"></div>
+    </div>
+
+    <button class="nav next" id="next" aria-label="Sljedeća stranica">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+  </div>
+
+  <div class="toolbar">
+    <div class="progress"><i id="bar"></i></div>
+    <div class="counter"><b id="cur">1</b> / <span id="total">16</span></div>
+    <button class="restart" id="restart" aria-label="Natrag na početak">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      Početak
+    </button>
+  </div>
+
+  <div class="hint">Povuci rub stranice · <kbd>←</kbd> <kbd>→</kbd> tipke · swipe na mobitelu</div>
+
+<script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+<script>
+/* ============================================================
+   TWO EDITIONS OF THE BROCHURE
+   - Desktop (širina ≥ 1024px): 16 kvadratnih stranica, spread po dvije.
+     Čitljivi parovi: (1), 2-3, 4-5, 6-7, 8-9, 10-11, 12-13, 14-15, (16).
+   - Mobile  (širina < 1024px): 13 vertikalnih stranica ("Mobilna HR"),
+     jedna stranica u prikazu.
+   Na resize preko praga makeBook() sam zamijeni komplet stranica.
+   ============================================================ */
+const MOBILE_BREAKPOINT = 1024;          // ispod ovoga → mobilna verzija
+const MOBILE_RATIO = 1600 / 1080;        // h/w vertikalnih stranica (≈1.481)
+
+const MOBILE_PAGES = Array.from({length: 13}, (_, i) =>
+  'assets/pages-mobile/page' + String(i + 1).padStart(2, '0') + '.jpg');
+
+const DESKTOP_PAGES = [
+  "assets/pages/page01.jpg", // 1  naslovnica (prednja korica)
+  "assets/pages/page02.jpg", // 2  Vaš stari PMS
+  "assets/pages/page03.jpg", // 3  Budućnost hotelskog poslovanja
+  "assets/pages/page04.jpg", // 4  Svaki hotelski odjel radi bolje
+  "assets/pages/page05.jpg", // 5  rentlio pro – grid odjela
+  "assets/pages/page06.jpg", // 6  Revenue manager koji ne spava (BI)
+  "assets/pages/page07.jpg", // 7  Dashboard
+  "assets/pages/page08.jpg", // 8  Rentlio Pay / CRM / Unified Inbox / AI Chatbot
+  "assets/pages/page09.jpg", // 9  Screenshotovi
+  "assets/pages/page10.jpg", // 10 Priče hotela koji su...
+  "assets/pages/page11.jpg", // 11 ...digitalizirali poslovanje
+  "assets/pages/page12.jpg", // 12 Mi brinemo o prelasku (onboarding koraci)
+  "assets/pages/page13.jpg", // 13 Edukacija / GO LIVE
+  "assets/pages/page14.jpg", // 14 Izbor modernih hotelijera (logo zid, lijevo)
+  "assets/pages/page15.jpg", // 15 Izbor modernih hotelijera (logo zid, desno)
+  "assets/pages/page16.jpg", // 16 zadnja (Dogovori sastanak + QR)
+];
+
+let PAGES = DESKTOP_PAGES;               // aktivni komplet (postavlja makeBook)
+function currentMode(){
+  return window.innerWidth < MOBILE_BREAKPOINT ? 'mobile' : 'desktop';
+}
+
+let el = document.getElementById('flipbook');
+const curEl = document.getElementById('cur');
+const totalEl = document.getElementById('total');
+const barEl = document.getElementById('bar');
+const prevBtn = document.getElementById('prev');
+const nextBtn = document.getElementById('next');
+const restartBtn = document.getElementById('restart');
+
+const wrap = document.querySelector('.flip-wrap');
+const PAGE_W = 520, PAGE_H = 520;       // desktop: kvadratne stranice
+let pageFlip = null;
+let bookMode = null;                     // mod aktivne knjige
+
+/* (Re)build the whole book. StPageFlip's update() is unreliable in HTML mode
+   (it races the library's own window-resize handler and can strand pages
+   mid-layout), so on resize we tear the book down and rebuild it at the new
+   size — init is always correct — restoring the page the reader was on. */
+function makeBook(startIdx){
+  if (pageFlip){ try { pageFlip.destroy(); } catch(_){} pageFlip = null; }
+  wrap.classList.remove('is-flipping');   // fresh instance starts at rest
+  // destroy() can remove the #flipbook node itself — recreate if needed
+  el = document.getElementById('flipbook');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'flipbook';
+    wrap.prepend(el);
+  }
+  el.innerHTML = '';
+
+  bookMode = currentMode();
+  PAGES = bookMode === 'mobile' ? MOBILE_PAGES : DESKTOP_PAGES;
+  totalEl.textContent = PAGES.length;
+  const startAt = Math.min(startIdx || 0, PAGES.length - 1);
+
+  PAGES.forEach((src, i) => {
+    const d = document.createElement('div');
+    // desktop: u uvezanoj knjizi neparne (1,3,5…) su desno, parne lijevo —
+    // klase nose sjenu hrpta. Mobilna verzija je jedan list, bez hrpta.
+    d.className = bookMode === 'mobile'
+      ? 'page'
+      : 'page ' + (i % 2 === 0 ? 'page--right' : 'page--left');
+    if (bookMode !== 'mobile' && (i === 0 || i === PAGES.length - 1)){
+      d.setAttribute('data-density', 'hard'); // kruta korica
+    }
+    const im = document.createElement('img');
+    im.src = src; im.alt = 'Stranica ' + (i + 1); im.draggable = false;
+    d.appendChild(im);
+    el.appendChild(d);
+  });
+
+  const common = {
+    maxShadowOpacity: 0.55,
+    showCover: true,
+    usePortrait: true,
+    mobileScrollSupport: false,
+    drawShadow: true,
+    flippingTime: 850,
+    swipeDistance: 30,
+    clickEventForward: true,
+    useMouseEvents: true,
+    startPage: startAt,
+  };
+
+  if (bookMode === 'mobile'){
+    // fiksna veličina po izmjerenom wrapu → uvijek jedna vertikalna stranica
+    const pw = Math.max(220, Math.round(wrap.getBoundingClientRect().width));
+    pageFlip = new St.PageFlip(el, Object.assign({
+      width: pw,
+      height: Math.round(pw * MOBILE_RATIO),
+      size: 'fixed',
+    }, common));
+  } else {
+    pageFlip = new St.PageFlip(el, Object.assign({
+      width: PAGE_W,
+      height: PAGE_H,
+      size: 'stretch',
+      minWidth: 260,
+      maxWidth: 1600,
+      minHeight: 260,
+      maxHeight: 1600,
+    }, common));
+  }
+
+  pageFlip.loadFromHTML(el.querySelectorAll('.page'));
+
+  pageFlip.on('flip', () => { update(); centre(); });
+  pageFlip.on('changeState', e => {
+    update();
+    // page is lifted off the surface → shadows spread; landed → they settle
+    const lifted = e.data === 'flipping' || e.data === 'user_fold' || e.data === 'fold_corner';
+    wrap.classList.toggle('is-flipping', lifted);
+    if (e.data === 'read') centre();
+  });
+
+  update();
+  centre();
+}
+
+// Preload a set of images (resolves even on errors)
+function preload(set){
+  return Promise.all(set.map(src => new Promise(res => {
+    const im = new Image();
+    im.onload = im.onerror = res;
+    im.src = src;
+  })));
+}
+
+// Preload the edition we start in, then build
+preload(currentMode() === 'mobile' ? MOBILE_PAGES : DESKTOP_PAGES).then(() => {
+  fitWrap();
+  makeBook(0);
+  document.getElementById('loader').classList.add('hide');
+});
+
+// Compute how big the book may be so it always fits the screen.
+function fitWrap(){
+  const narrow = window.innerWidth < 720;
+  const availW = window.innerWidth  - (narrow ? 24 : 168);   // padding + arrows
+  const availH = window.innerHeight - (narrow ? 150 : 196);  // toolbar + hint + padding
+  let w;
+  if (currentMode() === 'mobile'){
+    // one vertical page (w:h = 1:MOBILE_RATIO)
+    w = Math.min(availW, Math.round(availH / MOBILE_RATIO));
+    wrap.style.maxWidth = Math.max(220, Math.round(w)) + 'px';
+  } else {
+    // 2-wide spread of square pages (ratio 2:1)
+    w = Math.min(availW, availH * 2);
+    wrap.style.maxWidth = Math.max(280, Math.round(w)) + 'px';
+  }
+}
+
+function update(){
+  const idx = pageFlip.getCurrentPageIndex();      // 0-based, left page of spread
+  const n = PAGES.length;
+  const shown = Math.min(idx + 1, n);
+  curEl.textContent = shown;
+  barEl.style.width = ((shown) / n * 100) + '%';
+  prevBtn.disabled = idx <= 0;
+  nextBtn.disabled = idx >= n - 1;
+  restartBtn.classList.toggle('show', idx >= n - 1);
+}
+
+// Slide the book so a lone cover / back page ends up centred (in spread mode
+// the cover sits on the right half, the back on the left half).
+function centre(){
+  const n = PAGES.length;
+  const idx = pageFlip.getCurrentPageIndex();
+  let shift = 0;
+  if (pageFlip.getOrientation() === 'landscape'){
+    if (idx <= 0) shift = -25;           // cover → nudge left
+    else if (idx >= n - 1) shift = 25;   // back  → nudge right
+  }
+  el.style.transform = 'translateX(' + shift + '%)';
+}
+
+// ---- Controls ----
+prevBtn.addEventListener('click', () => pageFlip && pageFlip.flipPrev());
+nextBtn.addEventListener('click', () => pageFlip && pageFlip.flipNext());
+restartBtn.addEventListener('click', () => {
+  if (!pageFlip) return;
+  try { pageFlip.flip(0); }          // animirani povratak na naslovnicu
+  catch(_) { pageFlip.turnToPage(0); }
+});
+
+document.addEventListener('keydown', e => {
+  if (!pageFlip) return;
+  if (e.key === 'ArrowLeft')  { pageFlip.flipPrev(); }
+  if (e.key === 'ArrowRight') { pageFlip.flipNext(); }
+});
+
+// Debounced resize → full rebuild at the new size (never update() — see makeBook).
+// If a flip is mid-animation, wait it out so we never tear down a moving page —
+// but ask the LIBRARY for its state (our CSS class could go stale) and force
+// the rebuild after a few deferrals so it can never be postponed forever.
+let resizeTimer = null, resizeDefers = 0;
+function onResize(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!pageFlip) return;
+    let busy = false;
+    try { busy = pageFlip.getState() !== 'read'; } catch(_){}
+    if (busy && resizeDefers < 8){ resizeDefers++; onResize(); return; }
+    resizeDefers = 0;
+    const idx = pageFlip.getCurrentPageIndex();
+    const switching = currentMode() !== bookMode;
+    fitWrap();
+    if (switching){
+      // crossing the breakpoint → other edition: preload it, start from cover
+      const target = currentMode() === 'mobile' ? MOBILE_PAGES : DESKTOP_PAGES;
+      preload(target).then(() => { fitWrap(); makeBook(0); });
+    } else {
+      makeBook(idx);
+    }
+  }, 200);
+}
+window.addEventListener('resize', onResize);
+</script>
+</body>
+</html>
