@@ -5,3 +5,5 @@ rentlio-pro-flipbook/
 .DS_Store
 .claude/
 digitalna brošura/
+.vercel
+.env*

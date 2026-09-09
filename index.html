@@ -136,6 +136,38 @@
     background:linear-gradient(to left, transparent, rgba(0,0,0,.18) 55%, rgba(0,0,0,.42) 100%);
   }
 
+  /* ---- Klikabilne zone (linkovi iz PDF-a) ---- */
+  .hotspot{
+    position:absolute;
+    z-index:8;
+    cursor:pointer;
+    border-radius:8px;
+    transition:box-shadow .15s ease, background .15s ease;
+  }
+  .hotspot:hover{
+    background:rgba(120,180,255,.08);
+    box-shadow:0 0 0 2px rgba(120,180,255,.55);
+  }
+
+  /* ---- Language switcher (gore desno) ---- */
+  .lang-switch{
+    position:fixed;top:22px;right:32px;z-index:40;
+    display:flex;gap:4px;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.1);
+    padding:4px;border-radius:999px;
+    backdrop-filter:blur(8px);
+  }
+  .lang-switch button{
+    border:0;cursor:pointer;
+    background:transparent;color:var(--muted);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.04em;
+    padding:6px 12px;border-radius:999px;
+    transition:background .18s ease, color .18s ease;
+  }
+  .lang-switch button:hover{color:var(--text);}
+  .lang-switch button.active{background:var(--accent);color:#fff;}
+
   /* ---- Nav arrows ---- */
   .nav{
     border:0;cursor:pointer;
@@ -231,6 +263,8 @@
   @media (max-width:720px){
     /* single-page mode: no spine, so no inner-edge shading */
     #flipbook .page::after{display:none}
+    .lang-switch{top:12px;right:12px;padding:3px}
+    .lang-switch button{font-size:11.5px;padding:5px 9px}
     .nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;background:rgba(11,18,32,.5)}
     .nav.prev{left:2px}.nav.next{right:2px}
     .nav:hover{transform:translateY(-50%) scale(1.05)}
@@ -242,6 +276,12 @@
 <body>
 
   <div class="loader" id="loader"><div class="spinner"></div></div>
+
+  <div class="lang-switch" id="langSwitch" role="group" aria-label="Jezik / Language">
+    <button data-lang="hr" class="active">HR</button>
+    <button data-lang="en">EN</button>
+    <button data-lang="slo">SLO</button>
+  </div>
 
   <div class="stage">
     <button class="nav prev" id="prev" aria-label="Prethodna stranica">
@@ -262,17 +302,17 @@
     <div class="counter"><b id="cur">1</b> / <span id="total">16</span></div>
     <button class="restart" id="restart" aria-label="Natrag na početak">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
-      Početak
+      <span id="restartLabel">Početak</span>
     </button>
   </div>
 
-  <div class="hint">Povuci rub stranice · <kbd>←</kbd> <kbd>→</kbd> tipke · swipe na mobitelu</div>
+  <div class="hint" id="hint">Povuci rub stranice · <kbd>←</kbd> <kbd>→</kbd> tipke · swipe na mobitelu</div>
 
   <a class="corner-logo" href="https://rentl.io" target="_blank" rel="noopener" aria-label="Rentlio Pro">
     <img src="assets/rentlio-pro-logo.svg" alt="Rentlio Pro">
   </a>
 
-  <a class="pdf-btn" href="assets/rentlio-pro-brosura.pdf" download="Rentlio Pro brošura.pdf">
+  <a class="pdf-btn" id="pdfBtn" href="assets/rentlio-pro-brosura.pdf" download="Rentlio Pro brošura.pdf">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
     <span class="pdf-btn-full">Preuzmi PDF brošuru</span><span class="pdf-btn-short">PDF</span>
   </a>
@@ -290,29 +330,43 @@
 const MOBILE_BREAKPOINT = 1024;          // ispod ovoga → mobilna verzija
 const MOBILE_RATIO = 1600 / 1080;        // h/w vertikalnih stranica (≈1.481)
 
-const MOBILE_PAGES = Array.from({length: 13}, (_, i) =>
-  'assets/pages-mobile/page' + String(i + 1).padStart(2, '0') + '.jpg');
+/* Tri jezične edicije: svaka ima 16 desktop + 13 mobilnih stranica,
+   vlastiti PDF za download i prevedene labele sučelja. Default = HR. */
+const LANGS = {
+  hr: {
+    dir: 'assets/pages',            mdir: 'assets/pages-mobile',
+    pdf: 'assets/rentlio-pro-brosura.pdf',      pdfName: 'Rentlio Pro brošura.pdf',
+    btnFull: 'Preuzmi PDF brošuru', restart: 'Početak', alt: 'Stranica',
+    hint: 'Povuci rub stranice · <kbd>←</kbd> <kbd>→</kbd> tipke · swipe na mobitelu',
+  },
+  en: {
+    dir: 'assets/pages-en',         mdir: 'assets/pages-mobile-en',
+    pdf: 'assets/rentlio-pro-brosura-en.pdf',   pdfName: 'Rentlio Pro brochure.pdf',
+    btnFull: 'Download PDF brochure', restart: 'Restart', alt: 'Page',
+    hint: 'Drag the page edge · <kbd>←</kbd> <kbd>→</kbd> keys · swipe on mobile',
+  },
+  slo: {
+    dir: 'assets/pages-slo',        mdir: 'assets/pages-mobile-slo',
+    pdf: 'assets/rentlio-pro-brosura-slo.pdf',  pdfName: 'Rentlio Pro brošura SLO.pdf',
+    btnFull: 'Prenesi PDF brošuro', restart: 'Začetek', alt: 'Stran',
+    hint: 'Povleci rob strani · tipki <kbd>←</kbd> <kbd>→</kbd> · podrsaj na mobilnem',
+  },
+};
 
-const DESKTOP_PAGES = [
-  "assets/pages/page01.jpg", // 1  naslovnica (prednja korica)
-  "assets/pages/page02.jpg", // 2  Vaš stari PMS
-  "assets/pages/page03.jpg", // 3  Budućnost hotelskog poslovanja
-  "assets/pages/page04.jpg", // 4  Svaki hotelski odjel radi bolje
-  "assets/pages/page05.jpg", // 5  rentlio pro – grid odjela
-  "assets/pages/page06.jpg", // 6  Revenue manager koji ne spava (BI)
-  "assets/pages/page07.jpg", // 7  Dashboard
-  "assets/pages/page08.jpg", // 8  Rentlio Pay / CRM / Unified Inbox / AI Chatbot
-  "assets/pages/page09.jpg", // 9  Screenshotovi
-  "assets/pages/page10.jpg", // 10 Priče hotela koji su...
-  "assets/pages/page11.jpg", // 11 ...digitalizirali poslovanje
-  "assets/pages/page12.jpg", // 12 Mi brinemo o prelasku (onboarding koraci)
-  "assets/pages/page13.jpg", // 13 Edukacija / GO LIVE
-  "assets/pages/page14.jpg", // 14 Izbor modernih hotelijera (logo zid, lijevo)
-  "assets/pages/page15.jpg", // 15 Izbor modernih hotelijera (logo zid, desno)
-  "assets/pages/page16.jpg", // 16 zadnja (Dogovori sastanak + QR)
-];
+/* Klikabilne zone izvučene iz PDF link-anotacija (postotci od ruba stranice).
+   d = desktop stranice, m = mobilne; ključ je broj stranice. */
+const LINKS = {"hr":{"d":{"10":[{"x":20.96,"y":24.68,"w":30.02,"h":14.62,"u":"https://youtu.be/fn_I8lwlSEA?si=NoK-mIl71Ic-sPv_"},{"x":61.98,"y":24.68,"w":30.02,"h":14.62,"u":"https://youtu.be/4UirfaUuunQ?si=PRc99zFsIrn9mht4"},{"x":20.96,"y":63.29,"w":30.02,"h":14.62,"u":"https://youtu.be/lq3MFcBFTaQ?si=feBhu-uHHnmLn3Hj"},{"x":62.45,"y":63.29,"w":30.02,"h":14.62,"u":"https://youtu.be/ZoGzJnz1E64?si=Jvj0U-h8bq7eMyL0"}],"11":[{"x":7.91,"y":23.57,"w":30.02,"h":14.62,"u":"https://youtu.be/jZgKoDXjlK0?si=q9YDAppkynDs2aKb"},{"x":49.76,"y":23.94,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/manda-heritage-hotel"},{"x":8.28,"y":63.29,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/hotel-artena"},{"x":48.93,"y":63.29,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/zlatna-vala"}]},"m":{"8":[{"x":11.24,"y":25.85,"w":30.02,"h":9.87,"u":"https://youtu.be/fn_I8lwlSEA?si=NoK-mIl71Ic-sPv_"},{"x":57.91,"y":25.85,"w":30.02,"h":9.87,"u":"https://youtu.be/4UirfaUuunQ?si=PRc99zFsIrn9mht4"},{"x":11.24,"y":55.85,"w":30.02,"h":9.87,"u":"https://youtu.be/lq3MFcBFTaQ?si=feBhu-uHHnmLn3Hj"},{"x":58.46,"y":55.28,"w":30.02,"h":9.87,"u":"https://youtu.be/ZoGzJnz1E64?si=Jvj0U-h8bq7eMyL0"}],"9":[{"x":11.8,"y":25.6,"w":30.02,"h":9.87,"u":"https://youtu.be/jZgKoDXjlK0?si=q9YDAppkynDs2aKb"},{"x":58.09,"y":25.85,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/manda-heritage-hotel"},{"x":11.8,"y":55.53,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/hotel-artena"},{"x":58.0,"y":55.97,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/zlatna-vala"}],"13":[{"x":14.14,"y":43.67,"w":71.77,"h":7.79,"u":"https://rentl.io/dogovori-sastanak"}]}},"en":{"d":{"10":[{"x":20.96,"y":23.94,"w":30.02,"h":14.62,"u":"https://youtu.be/fn_I8lwlSEA?si=NoK-mIl71Ic-sPv_"},{"x":62.63,"y":24.4,"w":30.02,"h":14.62,"u":"https://youtu.be/4UirfaUuunQ?si=PRc99zFsIrn9mht4"},{"x":62.45,"y":62.92,"w":30.02,"h":14.62,"u":"https://youtu.be/ZoGzJnz1E64?si=Jvj0U-h8bq7eMyL0"},{"x":20.69,"y":63.2,"w":30.02,"h":14.62,"u":"https://youtu.be/lq3MFcBFTaQ?si=feBhu-uHHnmLn3Hj"}],"11":[{"x":8.28,"y":23.94,"w":30.02,"h":14.62,"u":"https://youtu.be/jZgKoDXjlK0?si=q9YDAppkynDs2aKb"},{"x":48.93,"y":24.03,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/manda-heritage-hotel"},{"x":8.28,"y":63.2,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/hotel-artena"},{"x":48.93,"y":63.2,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/zlatna-vala"}]},"m":{"8":[{"x":11.24,"y":25.85,"w":30.02,"h":9.87,"u":"https://youtu.be/fn_I8lwlSEA?si=NoK-mIl71Ic-sPv_"},{"x":57.91,"y":25.85,"w":30.02,"h":9.87,"u":"https://youtu.be/4UirfaUuunQ?si=PRc99zFsIrn9mht4"},{"x":11.24,"y":55.53,"w":30.02,"h":9.87,"u":"https://youtu.be/lq3MFcBFTaQ?si=feBhu-uHHnmLn3Hj"},{"x":57.91,"y":55.28,"w":30.02,"h":9.87,"u":"https://youtu.be/ZoGzJnz1E64?si=Jvj0U-h8bq7eMyL0"}],"9":[{"x":11.8,"y":25.6,"w":30.02,"h":9.87,"u":"https://youtu.be/jZgKoDXjlK0?si=q9YDAppkynDs2aKb"},{"x":58.0,"y":25.85,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/manda-heritage-hotel"},{"x":11.8,"y":55.47,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/hotel-artena"},{"x":58.0,"y":55.47,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/zlatna-vala"}],"13":[{"x":20.42,"y":43.67,"w":59.21,"h":7.79,"u":"https://new-form-windows--rentlio.netlify.app/en/book-a-meeting"}]}},"slo":{"d":{"10":[{"x":61.98,"y":24.4,"w":30.02,"h":14.62,"u":"https://youtu.be/4UirfaUuunQ?si=PRc99zFsIrn9mht4"},{"x":20.96,"y":24.59,"w":30.02,"h":14.62,"u":"https://youtu.be/fn_I8lwlSEA?si=NoK-mIl71Ic-sPv_"},{"x":61.98,"y":62.18,"w":30.02,"h":14.62,"u":"https://youtu.be/ZoGzJnz1E64?si=Jvj0U-h8bq7eMyL0"},{"x":20.96,"y":63.2,"w":30.02,"h":14.62,"u":"https://youtu.be/lq3MFcBFTaQ?si=feBhu-uHHnmLn3Hj"}],"11":[{"x":48.93,"y":22.55,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/manda-heritage-hotel"},{"x":8.28,"y":23.11,"w":30.02,"h":14.62,"u":"https://youtu.be/jZgKoDXjlK0?si=q9YDAppkynDs2aKb"},{"x":48.93,"y":62.09,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/zlatna-vala"},{"x":8.28,"y":62.46,"w":30.02,"h":14.62,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/hotel-artena"}]},"m":{"8":[{"x":11.24,"y":25.85,"w":30.02,"h":9.87,"u":"https://youtu.be/fn_I8lwlSEA?si=NoK-mIl71Ic-sPv_"},{"x":57.91,"y":25.85,"w":30.02,"h":9.87,"u":"https://youtu.be/4UirfaUuunQ?si=PRc99zFsIrn9mht4"},{"x":11.24,"y":55.47,"w":30.02,"h":9.87,"u":"https://youtu.be/lq3MFcBFTaQ?si=feBhu-uHHnmLn3Hj"},{"x":57.91,"y":55.28,"w":30.02,"h":9.87,"u":"https://youtu.be/ZoGzJnz1E64?si=Jvj0U-h8bq7eMyL0"}],"9":[{"x":11.8,"y":25.6,"w":30.02,"h":9.87,"u":"https://youtu.be/jZgKoDXjlK0?si=q9YDAppkynDs2aKb"},{"x":58.09,"y":25.85,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/manda-heritage-hotel"},{"x":11.8,"y":55.91,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/hotel-artena"},{"x":58.0,"y":55.47,"w":30.02,"h":9.87,"u":"https://new-form-windows--rentlio.netlify.app/price-korisnika/zlatna-vala"}],"13":[{"x":9.96,"y":43.67,"w":80.13,"h":7.79,"u":"https://new-form-windows--rentlio.netlify.app/si/rezerviraj-sestanek"}]}}};
 
-let PAGES = DESKTOP_PAGES;               // aktivni komplet (postavlja makeBook)
+let lang = 'hr';
+try { if (LANGS[localStorage.getItem('brosura-lang')]) lang = localStorage.getItem('brosura-lang'); } catch(_){}
+
+function pageSet(l, mode){
+  const c = LANGS[l];
+  const dir = mode === 'mobile' ? c.mdir : c.dir;
+  const n = mode === 'mobile' ? 13 : 16;
+  return Array.from({length: n}, (_, i) => dir + '/page' + String(i + 1).padStart(2, '0') + '.jpg');
+}
+let PAGES = pageSet(lang, 'desktop');    // aktivni komplet (postavlja makeBook)
 function currentMode(){
   return window.innerWidth < MOBILE_BREAKPOINT ? 'mobile' : 'desktop';
 }
@@ -347,9 +401,10 @@ function makeBook(startIdx){
   el.innerHTML = '';
 
   bookMode = currentMode();
-  PAGES = bookMode === 'mobile' ? MOBILE_PAGES : DESKTOP_PAGES;
+  PAGES = pageSet(lang, bookMode);
   totalEl.textContent = PAGES.length;
   const startAt = Math.min(startIdx || 0, PAGES.length - 1);
+  const langLinks = (LINKS[lang] || {})[bookMode === 'mobile' ? 'm' : 'd'] || {};
 
   PAGES.forEach((src, i) => {
     const d = document.createElement('div');
@@ -362,8 +417,22 @@ function makeBook(startIdx){
       d.setAttribute('data-density', 'hard'); // kruta korica
     }
     const im = document.createElement('img');
-    im.src = src; im.alt = 'Stranica ' + (i + 1); im.draggable = false;
+    im.src = src; im.alt = LANGS[lang].alt + ' ' + (i + 1); im.draggable = false;
     d.appendChild(im);
+
+    // klikabilne zone iz PDF link-anotacija — dio su stranice pa se
+    // savijaju s njom; stopPropagation da pritisak na link ne pokrene listanje
+    (langLinks[String(i + 1)] || []).forEach(L => {
+      const a = document.createElement('a');
+      a.className = 'hotspot';
+      a.href = L.u; a.target = '_blank'; a.rel = 'noopener';
+      a.style.left = L.x + '%'; a.style.top = L.y + '%';
+      a.style.width = L.w + '%'; a.style.height = L.h + '%';
+      ['mousedown','touchstart','pointerdown'].forEach(ev =>
+        a.addEventListener(ev, e => e.stopPropagation()));
+      d.appendChild(a);
+    });
+
     el.appendChild(d);
   });
 
@@ -425,11 +494,41 @@ function preload(set){
 }
 
 // Preload the edition we start in, then build
-preload(currentMode() === 'mobile' ? MOBILE_PAGES : DESKTOP_PAGES).then(() => {
+applyLangUI();
+preload(pageSet(lang, currentMode())).then(() => {
   fitWrap();
   makeBook(0);
   document.getElementById('loader').classList.add('hide');
 });
+
+// ---- Language switching ----
+function applyLangUI(){
+  const c = LANGS[lang];
+  document.querySelectorAll('#langSwitch button').forEach(b =>
+    b.classList.toggle('active', b.dataset.lang === lang));
+  const btn = document.getElementById('pdfBtn');
+  btn.href = c.pdf;
+  btn.setAttribute('download', c.pdfName);
+  document.querySelector('.pdf-btn-full').textContent = c.btnFull;
+  document.getElementById('hint').innerHTML = c.hint;
+  document.getElementById('restartLabel').textContent = c.restart;
+  document.documentElement.lang = lang === 'slo' ? 'sl' : lang;
+}
+
+function setLang(l){
+  if (!LANGS[l] || l === lang) return;
+  lang = l;
+  try { localStorage.setItem('brosura-lang', l); } catch(_){}
+  applyLangUI();
+  const idx = pageFlip ? pageFlip.getCurrentPageIndex() : 0;
+  preload(pageSet(lang, currentMode())).then(() => {
+    fitWrap();
+    makeBook(idx);   // isti raspored stranica u svim jezicima → ostani gdje jesi
+  });
+}
+
+document.querySelectorAll('#langSwitch button').forEach(b =>
+  b.addEventListener('click', () => setLang(b.dataset.lang)));
 
 // Compute how big the book may be so it always fits the screen.
 function fitWrap(){
@@ -505,8 +604,7 @@ function onResize(){
     fitWrap();
     if (switching){
       // crossing the breakpoint → other edition: preload it, start from cover
-      const target = currentMode() === 'mobile' ? MOBILE_PAGES : DESKTOP_PAGES;
-      preload(target).then(() => { fitWrap(); makeBook(0); });
+      preload(pageSet(lang, currentMode())).then(() => { fitWrap(); makeBook(0); });
     } else {
       makeBook(idx);
     }
